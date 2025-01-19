@@ -24,7 +24,7 @@ def text_extract(text:str):
     return text_features
 
 
-def img_extract(image_path: os.path):
+def image_extract(image_path: os.path):
     """
     Function to generate image embeddings using mobileCLIP
     args:
