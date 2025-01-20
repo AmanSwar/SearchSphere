@@ -5,6 +5,7 @@ import faiss
 import numpy as np
 import traceback 
 import argparse
+import torch
 
 #util files
 import encoder.config as config
@@ -92,7 +93,8 @@ def content_extract():
             if file_path is None:
                 CONTENT_QUEUE.put(None)
                 break
-
+            if args.verbose:
+                print(f"current file getting extracted : {file_path}")
             file_meta_data = utils.get_meta(file_path=file_path)
             file_ext = file_path.split('.')[-1]
             # if text based files
@@ -139,13 +141,16 @@ def generate_and_store_embedding():
                 generated_embedding = embedding.text_extract(content)
 
             if generated_embedding is not None:
+                #ensuring its a numpy array
+                if isinstance(generated_embedding ,torch.Tensor):
+                    generated_embedding = generated_embedding.cpu().numpy()
                 store(embedding=generated_embedding , metadata=metadata)
 
     except Exception as e:
         print(f"error while generating and storing embedding : {e}")
         traceback.print_exc()
 
-def store(embedding , metadata:dict):
+def store(embedding : np.array , metadata:dict):
     """
     Function to add the embedding and metadata 
     Args:
@@ -155,7 +160,12 @@ def store(embedding , metadata:dict):
 
     global METADATA_MAP
 
-    embedding_np = np.array([embedding] , dtype="float32")
+    if embedding.ndim == 1:
+        embedding_np = embedding.reshape(1 , -1)
+    else:
+        embedding_np = embedding
+
+    embedding_np = embedding_np.astype('float32')
     faiss_id = INDEX.ntotal
     INDEX.add(embedding_np)
     METADATA_MAP[faiss_id] = metadata
@@ -225,6 +235,7 @@ if __name__ == "__main__":
     end_time = time.time() - start_time
 
     print(f"done , time taken : {end_time}")
+    print(f"current item in faiss is : {INDEX.ntotal}")
 
 
 
