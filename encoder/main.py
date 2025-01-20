@@ -3,11 +3,23 @@ import psutil
 from multiprocessing import Process , Queue
 import faiss
 import numpy as np
+import traceback 
+import argparse
 
 #util files
 import encoder.config as config
 import encoder.utils as utils
 import encoder.embedding as embedding
+
+
+parser = argparse.ArgumentParser(description="arg parser for cli")
+
+parser.add_argument("--verbose" , action="store_true" , help="too see which directory its currently at")
+
+args = parser.parse_args()
+
+
+
 
 #temp
 search_dir = "/home/aman/code/searchsp/test/tempsearchdir"
@@ -48,15 +60,24 @@ def traverse_all_drives():
 
 
 def test_traversal():
-    for dirpath , dirnames , filenames  in os.walk(search_dir):
-        for filename in filenames:
-            file_path = os.path.join(dirpath , filename)
-            file_ext = file_path.split('.')[-1]
-            if file_ext in config.SUPPORTED_EXT_IMG or file_ext in config.SUPPORTED_EXT_TEXT:
-                FILE_QUEUE.put(file_path)
-                
+    try:
+        for dirpath , dirnames , filenames  in os.walk(search_dir):
+            
+            for filename in filenames:
+                file_path = os.path.join(dirpath , filename)
+                if args.verbose:
+                    print(f"Traversing directory : {dirpath}")
+                    print(f"current file : {filename}")
+                file_ext = file_path.split('.')[-1]
+                if file_ext in config.SUPPORTED_EXT_IMG or file_ext in config.SUPPORTED_EXT_TEXT:
+                    FILE_QUEUE.put(file_path)
+                    
 
-    FILE_QUEUE.put(None)
+        FILE_QUEUE.put(None)
+    
+    except Exception as e:
+        print(f"error in test traversal : {e}")
+        traceback.print_exc()
 
 
 
@@ -86,7 +107,8 @@ def content_extract():
                 CONTENT_QUEUE.put(content_dic)
     
     except Exception as e:
-
+        print(f"error in content extraction phase : {e}")
+        traceback.print_exc()
 
 
 def generate_and_store_embedding():
@@ -120,7 +142,8 @@ def generate_and_store_embedding():
                 store(embedding=generated_embedding , metadata=metadata)
 
     except Exception as e:
-        pass
+        print(f"error while generating and storing embedding : {e}")
+        traceback.print_exc()
 
 def store(embedding , metadata:dict):
     """
@@ -138,34 +161,79 @@ def store(embedding , metadata:dict):
     METADATA_MAP[faiss_id] = metadata
 
 
+def terminate_process(process: Process):
+    """
+    function to terminate all the processes
+
+    """
+
+    for proc in process:
+        if proc.is_alive:
+            proc.terminate()
+            proc.join()
+    
+    print("all process bye bye...")
+
+        
+
+
 if __name__ == "__main__":
     import time
 
     
     start_time = time.time()
     # traverse_all_drives()
+    
+
+    process = [
+        Process(target=test_traversal),
+        Process(target=content_extract),
+        Process(target=generate_and_store_embedding)
+    ]
+
     try:
 
-        traversal_proc = Process(target=test_traversal)
-        extraction_proc = Process(target=content_extract)
-        embedding_proc = Process(target=generate_and_store_embedding)
+        for proc in process:
+            proc.start()
 
-        traversal_proc.start()
-        extraction_proc.start()
-        embedding_proc.start()
-
-        traversal_proc.join()
-        extraction_proc.join()
-        embedding_proc.join()
+        
+        for proc in process:
+            proc.join()
 
     except Exception as e:
-        print(f"exception {e}")
-        print(f"total before rest {INDEX.ntotal}")
+        print(f"exception in main process {e}")
+
+        traceback.print_exc()
+        terminate_process(process)
+
+ 
+        #index reset 
+        print(f"index before reset : {INDEX.ntotal}")
         INDEX.reset()
-        print(f"index reset , current {INDEX.ntotal}")
+        print(f"index after reset : {INDEX.ntotal} ")
+
+    except KeyboardInterrupt:
+        print(f"keyboard interrupt")
+        terminate_process(process)
+        
+        print(f"index before reset : {INDEX.ntotal}")
+        INDEX.reset()
+        print(f"index after reset : {INDEX.ntotal} ")
+    
+
+
     end_time = time.time() - start_time
 
-    print(f"DONE in {end_time:.3f}")
+    print(f"done , time taken : {end_time}")
+
+
+
+    
+    
+
+    
+
+    
 
 
 
