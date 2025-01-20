@@ -1,5 +1,3 @@
-import sys
-sys.path.append("/home/aman/code/resc/github/MOBILEClip/ml-mobileclip")
 
 import mobileclip
 import torch
