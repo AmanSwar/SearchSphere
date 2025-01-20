@@ -7,6 +7,7 @@ import pathlib
 from datetime import datetime
 import markdown
 from bs4 import BeautifulSoup
+from tqdm import tqdm
 
 def get_meta(file_path: os.path) -> dict:
     """
@@ -71,7 +72,7 @@ def pdf_extractor(file_path: os.path) -> str:
             first_page = reader.pages[0] if reader.pages[0] != '' else reader.pages[1]
             pdf_text += first_page.extract_text()
 
-            for page_num in range(toc_start_page , end_page):
+            for page_num in tqdm(range(toc_start_page , end_page)):
                 page = reader.pages[page_num]
                 pdf_text += page.extract_text()
 
@@ -80,7 +81,7 @@ def pdf_extractor(file_path: os.path) -> str:
                     break
     
         else: #if toc not available
-            for page_num in range(start_page , end_page):
+            for page_num in tqdm(range(start_page , end_page)):
                 page = reader.pages[page_num]
                 pdf_text += page.extract_text()
                 if len(pdf_text) >= 10000:
@@ -108,7 +109,7 @@ def text_extractor(file_path: os.path)->str:
 def docs_extractor(file_path: os.path) -> str:
     doc = Document(file_path)
     txt = ''
-    for para in doc.paragraphs:
+    for para in tqdm(doc.paragraphs):
         txt += para.text + '\n'
         if len(txt) >= 10000:
             break
@@ -119,7 +120,7 @@ def ppt_extractor(file_path: os.path) -> str:
     prs = Presentation(file_path)
 
     text = ""
-    for slide in prs.slides:
+    for slide in tqdm(prs.slides):
         for shape in slide.shapes:
             if hasattr(shape , "text"):
                 text += shape.text
@@ -133,7 +134,7 @@ def excel_extractor(file_path: os.path) -> str:
     text = ""
     col_name = excel_file.columns.to_list()
     if col_name is not None:
-        for cols in col_name:   
+        for cols in tqdm(col_name):   
             text += cols
 
     else:
