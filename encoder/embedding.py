@@ -19,6 +19,8 @@ def text_extract(text:str):
     with torch.no_grad():
         text_features = model.encode_text(inputs)
 
+        text_features =  text_features.cpu().numpy()
+
     return text_features
 
 
@@ -39,6 +41,7 @@ def image_extract(image_path: os.path):
         image_features = model.encode_image(image)
         image_features /= image_features.norm(dim=-1, keepdim=True)
 
-        return image_features
+        image_features = image_features.cpu().numpy()
+    return image_features
 
 
