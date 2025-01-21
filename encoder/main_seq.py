@@ -9,7 +9,7 @@ import torch
 from tqdm import tqdm
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
-
+import json
 
 import encoder.config as config
 import encoder.utils as utils
@@ -173,6 +173,12 @@ if __name__ == "__main__":
     test_traversal()
 
     print(f"TOTAL ENTERIES : {INDEX.ntotal}")
+
+    #save index and metadata
+    faiss.write_index(INDEX , "index/faiss_index.index")
+    with open("index/file_meta.json" , 'w+') as file:
+        json.dump(METADATA_MAP , file)
+    print("saved!!")
     end_time = time.time() - start_time
 
     print(end_time)
