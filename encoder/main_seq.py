@@ -30,7 +30,7 @@ content_extractor_func = {
     "md" : utils.markdown_extractor
 }
 
-INDEX = faiss.IndexFlatL2(512)
+INDEX = faiss.IndexFlatIP(512)
 METADATA_MAP = {}
 
 def test_traversal():
@@ -143,6 +143,10 @@ def store_embedding(data:tuple):
 
     try:
         embedding_vec , metadata = data
+
+        #for debugging purposes
+        norm = np.linalg.norm(embedding_vec)
+        print(f"Embedding norm for {metadata['file_name']}: {norm}")
 
         if embedding_vec.ndim == 1:
             embedding_np = embedding_vec.reshape(1 , -1)
