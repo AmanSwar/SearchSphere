@@ -34,6 +34,8 @@ INDEX = faiss.IndexFlatL2(512)
 METADATA_MAP = {}
 
 def test_traversal():
+    INDEX.reset()
+    print(f"current item in index : {INDEX.ntotal}")
     try:
         for dirpath , dirnames , filenames  in tqdm(os.walk(search_dir)):
             for filename in filenames:
@@ -47,6 +49,7 @@ def test_traversal():
                 file_ext = file_path.split('.')[-1]
                 if file_ext in config.SUPPORTED_EXT_IMG or file_ext in config.SUPPORTED_EXT_TEXT:
                     content_extract(file_path=file_path)
+        
 
     except Exception as e:
         print(f"error in test traversal : {e}")
@@ -63,6 +66,7 @@ def content_extract(file_path):
         if args.verbose:
             print(f"current file getting extracted : {file_path}")
 
+        # get meta data of the file -> dict
         file_meta_data = utils.get_meta(file_path=file_path)
         file_ext = file_path.split('.')[-1]
         # if text based files
@@ -70,7 +74,6 @@ def content_extract(file_path):
             
             content = content_extractor_func[file_ext](file_path=file_path)
             content_dic = {"content" : content , "metadata" : file_meta_data}
-            # CONTENT_QUEUE.put(content_dic)
             generate_embedding(content_dic)
 
             if args.verbose:
@@ -107,6 +110,8 @@ def generate_embedding(content_data):
             #double check to avoid edge cases
             if os.path.exists(img_content):
                 '''handel images''' 
+                if args.verbose:
+                    print("generating embedding ...")
                 generated_embedding = embedding.image_extract(img_content)
 
         else:
@@ -115,9 +120,11 @@ def generate_embedding(content_data):
 
         if generated_embedding is not None:
             #ensuring its a numpy array
+            if args.verbose:
+                print("generated")
             if isinstance(generated_embedding ,torch.Tensor):
                 generated_embedding = generated_embedding.cpu().numpy()
-            data = (generate_embedding , metadata)
+            data = (generated_embedding , metadata)
             store_embedding(data)
             
     except Exception as e:
@@ -142,6 +149,8 @@ def store_embedding(data:tuple):
         else:
             embedding_np = embedding_vec
 
+        if args.verbose:
+            print("storing")
         embedding_np = embedding_np.astype('float32')
         faiss_id = INDEX.ntotal
         INDEX.add(embedding_np)
@@ -157,5 +166,13 @@ def store_embedding(data:tuple):
 
 
 if __name__ == "__main__":
+    import time
+    start_time = time.time()
+
 
     test_traversal()
+
+    print(f"TOTAL ENTERIES : {INDEX.ntotal}")
+    end_time = time.time() - start_time
+
+    print(end_time)
