@@ -3,7 +3,8 @@ import mobileclip
 import torch
 from PIL import Image
 import os
-
+model , _ , preprocess = mobileclip.create_model_and_transforms('mobileclip_s0' , pretrained=r"/home/aman/weights/mobileclip_s0.pt")
+tokenizer = mobileclip.get_tokenizer('mobileclip_s0')
 def text_extract(text:str):
     """
     Function to generate text embeddings using mobileclip
@@ -13,12 +14,11 @@ def text_extract(text:str):
     return:
         text_features:torch.tensor = embeddings of text
     """
-    model , _ , preprocess = mobileclip.create_model_and_transforms('mobileclip_s0' , pretrained=r"/home/aman/weights/mobileclip_s0.pt")
-    tokenizer = mobileclip.get_tokenizer('mobileclip_s0')
+    global model , tokenizer
     inputs = tokenizer([text])
     with torch.no_grad():
         text_features = model.encode_text(inputs)
-
+        text_features /= text_features.norm(dim=-1, keepdim=True)
         text_features =  text_features.cpu().numpy()
 
     return text_features
@@ -32,12 +32,11 @@ def image_extract(image_path: os.path):
     return:
         image_feature:torch.tensor = embedding of image
     """
-    model , _ , preprocess = mobileclip.create_model_and_transforms('mobileclip_s0' , pretrained=r"/home/aman/weights/mobileclip_s0.pt")
-    tokenizer = mobileclip.get_tokenizer('mobileclip_s0')
+    global model , preprocess
 
     image = preprocess(Image.open(image_path).convert('RGB')).unsqueeze(0)
 
-    with torch.no_grad(), torch.cuda.amp.autocast():
+    with torch.no_grad():
         image_features = model.encode_image(image)
         image_features /= image_features.norm(dim=-1, keepdim=True)
 
