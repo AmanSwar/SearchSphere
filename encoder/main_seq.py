@@ -1,7 +1,7 @@
 import os
 import psutil
 from multiprocessing import Process , Queue , Manager
-import faiss
+
 import numpy as np
 import traceback 
 import argparse
@@ -14,13 +14,15 @@ import json
 import encoder.config as config
 import encoder.utils as utils
 import encoder.embedding as embedding
+from encoder.faiss_base import FAISSManager
 
 parser = argparse.ArgumentParser(description="arg parser for cli")
 parser.add_argument("--verbose" , action="store_true" , help="too see which directory its currently at")
+parser.add_argument("--dir" , action="store_true" , help="Dir to create embeddings")
 args = parser.parse_args()
 
 
-search_dir = "/home/aman/code/searchsp/test/tempsearchdir"
+search_dir = args.dir if args.dir is not None else "/home/aman/code/searchsp/test/tempsearchdir"
 content_extractor_func = {
     "pdf" : utils.pdf_extractor,
     "txt" : utils.text_extractor,
@@ -30,12 +32,13 @@ content_extractor_func = {
     "md" : utils.markdown_extractor
 }
 
-INDEX = faiss.IndexFlatIP(512)
-METADATA_MAP = {}
+faiss_manager = FAISSManager(verbose=args.verbose)
 
 def test_traversal():
-    INDEX.reset()
-    print(f"current item in index : {INDEX.ntotal}")
+    faiss_manager.reset_index()
+    current_size = faiss_manager.current_size()
+    print(f"current item in text index : {current_size[0]}")
+    print(f"current item in image index : {current_size[1]}")
     try:
         for dirpath , dirnames , filenames  in tqdm(os.walk(search_dir)):
             for filename in filenames:
@@ -50,7 +53,8 @@ def test_traversal():
                 if file_ext in config.SUPPORTED_EXT_IMG or file_ext in config.SUPPORTED_EXT_TEXT:
                     content_extract(file_path=file_path)
         
-
+        #calling train after traversal ends
+        faiss_manager.train_add()
     except Exception as e:
         print(f"error in test traversal : {e}")
         traceback.print_exc()
@@ -103,7 +107,8 @@ def generate_embedding(content_data):
         content = content_data["content"]
         metadata = content_data["metadata"]
         generated_embedding = None
-
+        embed_type = None
+	 	
         #handle the case of images
         if content[-1] == "~":
             img_content = content[:-1]
@@ -112,10 +117,12 @@ def generate_embedding(content_data):
                 '''handel images''' 
                 if args.verbose:
                     print("generating embedding ...")
+                embed_type = "image"
                 generated_embedding = embedding.image_extract(img_content)
 
         else:
             '''handle texts'''
+            embed_type = "text"
             generated_embedding = embedding.text_extract(content)
 
         if generated_embedding is not None:
@@ -124,7 +131,7 @@ def generate_embedding(content_data):
                 print("generated")
             if isinstance(generated_embedding ,torch.Tensor):
                 generated_embedding = generated_embedding.cpu().numpy()
-            data = (generated_embedding , metadata)
+            data = (embed_type , generated_embedding , metadata)
             store_embedding(data)
             
     except Exception as e:
@@ -142,27 +149,13 @@ def store_embedding(data:tuple):
     """
 
     try:
-        embedding_vec , metadata = data
+        embed_type, embedding_vec , metadata = data
 
         #for debugging purposes
         norm = np.linalg.norm(embedding_vec)
         print(f"Embedding norm for {metadata['file_name']}: {norm}")
-
-        if embedding_vec.ndim == 1:
-            embedding_np = embedding_vec.reshape(1 , -1)
-        else:
-            embedding_np = embedding_vec
-
-        if args.verbose:
-            print("storing")
-        embedding_np = embedding_np.astype('float32')
-        faiss_id = INDEX.ntotal
-        INDEX.add(embedding_np)
-        METADATA_MAP[faiss_id] = metadata
-
-
-        if args.verbose:
-            print(f"Added Embedding {faiss_id} to index")
+        faiss_manager.store_temp(type=embed_type , embedding=embedding_vec , metdata=metadata)
+        
 
     except Exception as e:
         print(f"Error which storing embedding : {e}")
@@ -175,14 +168,8 @@ if __name__ == "__main__":
 
 
     test_traversal()
-
-    print(f"TOTAL ENTERIES : {INDEX.ntotal}")
-
-    #save index and metadata
-    faiss.write_index(INDEX , "index/faiss_index.index")
-    with open("index/file_meta.json" , 'w+') as file:
-        json.dump(METADATA_MAP , file)
-    print("saved!!")
+    print(f"TOTAL ENTERIES : {faiss_manager.current_size()}")
+    faiss_manager.save_state()
     end_time = time.time() - start_time
 
     print(end_time)
