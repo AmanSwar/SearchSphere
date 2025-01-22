@@ -4,15 +4,11 @@ import pickle
 import os
 from typing import Dict , Any  , List
 import time
+import json
 
 class FAISSManager:
     """
-    - stored embedding -> temp 
-    - training
-    - adding
-        - image index
-        - text index
-    - quantization
+    Class for managing FAISS db for dynamic training and adding 
 
     """
 
@@ -43,24 +39,29 @@ class FAISSManager:
                 - image
                 - text
         """
-        if embedding.ndim == 1:
-            embedding = embedding.reshape(1 , -1)
-        
-        #smoll error handeling step 
-        if embedding.shape[1] != self.embedding_dim:
-            raise ValueError(f"Embedding must have dim {self.embedding_dim}")
-        
-        if type == "image":
-            self.image_temp.append(embedding.astype("float32"))
-            self.image_temp_metadata.append(metdata)
 
-        elif type == "text":
-            self.text_temp.append(embedding.astype("float32"))
-            self.text_temp_metadata.append(metdata)
+        if len(self.text_temp) == 10000 or len(self.image_temp) == 10000:
+             self.train_add()
 
         else:
-            raise Exception("Incorrect embedding type")
-        
+            if embedding.ndim == 1:
+                embedding = embedding.reshape(1 , -1)
+            
+            #smoll error handeling step 
+            if embedding.shape[1] != self.embedding_dim:
+                raise ValueError(f"Embedding must have dim {self.embedding_dim}")
+            
+            if type == "image":
+                self.image_temp.append(embedding.astype("float32"))
+                self.image_temp_metadata.append(metdata)
+
+            elif type == "text":
+                self.text_temp.append(embedding.astype("float32"))
+                self.text_temp_metadata.append(metdata)
+
+            else:
+                raise Exception("Incorrect embedding type")
+            
     
     def train_add(self):
         """
@@ -71,7 +72,8 @@ class FAISSManager:
 
 
         text_stack = np.vstack(self.text_temp)
-        self.text_index.train(text_stack)
+        if not self.text_index.is_trained:
+            self.text_index.train(text_stack)
         self.text_index.add(text_stack)
 
         #to store metadata
@@ -80,12 +82,13 @@ class FAISSManager:
             self.text_temp_metadata[faiss_id] = metadata
 
         image_stack = np.vstack(self.image_temp)
-        self.image_index.train(image_stack)
+        if not self.image_index.is_trained:
+            self.image_index.train(image_stack)
         self.image_index.add(image_stack)
 
         for i , metadata in enumerate(self.image_temp_metadata):
-             faiss_id = self.image_index.ntotal - len(self.image_temp) + i
-             self.image_temp_metadata[faiss_id] = metadata
+            faiss_id = self.image_index.ntotal - len(self.image_temp) + i
+            self.image_temp_metadata[faiss_id] = metadata
 
 
         if self.verbose:
@@ -95,11 +98,56 @@ class FAISSManager:
         
 
     def _clear_temp(self):
-         self.text_temp = []
-         self.image_temp = []
-         self.text_temp_metadata = []
-         self.image_temp_metadata = []
+        self.text_temp = []
+        self.image_temp = []
+        self.text_temp_metadata = []
+        self.image_temp_metadata = []
 
+    def reset_index(self):
+        """
+        Function to reset index to null
+        """
+        self.text_index.reset()
+        self.image_index.reset()
+
+    def current_size(self) -> tuple:
+        """
+        Function to give current sizes of indexs
+        return:
+            tuple(text index size , image index size)
+        """
+        image_size = self.image_index.ntotal
+        text_size = self.text_index.ntotal
+
+        return (text_size , image_size)
+    
+    def save_state(self):
+        """
+        Function to save state
+        """
+        faiss.write_index(self.text_index , "index/text_index.index")
+        faiss.write_index(self.image_index , "index/image_index.index")
+
+        with open("index/file_meta.json" , "w+") as file:
+            json.dump(self.metadata , file)
+
+        print("saved")
+
+    def load_state(self):
+        """
+        Function to load state
+        """
+        self.text_index = faiss.read_index("index/text_index.index")
+        self.image_index = faiss.read_index("index/image_index.index")
+
+        with open("index/file_meta.json" , "w+") as file:
+            self.metadata = json.load(file)
+
+
+    
+         
+
+    
     
     
 
