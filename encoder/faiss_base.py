@@ -155,7 +155,7 @@ class FAISSManagerHNSW:
     Class to manage FASISS db with HNSW and PQ
     """
 
-    def __init__(self , embedding_dim:int = 512 ,subvector_count:int = 16 , nbit:int = 8 , verbose=False):
+    def __init__(self , embedding_dim:int = 512 ,subvector_count:int = 16 , nbit:int = 4 , verbose=False):
 
         # HYPERPARAMS
         #emebdding dim
@@ -166,11 +166,13 @@ class FAISSManagerHNSW:
         #for HNSW
         self.M = 32
 
-        self.text_index = faiss.IndexHNSWPQ(embedding_dim, subvector_count , nbit)
-        self.image_index = faiss.IndexHNSWPQ(embedding_dim , subvector_count , nbit)
+        self.text_index = faiss.IndexHNSWFlat(embedding_dim, self.M)
+        self.image_index = faiss.IndexHNSWFlat(embedding_dim ,self.M)
 
         self.text_index.hnsw.efConstruction = 80
+        self.text_index.hnsw.efSearch = 16
         self.image_index.hnsw.efConstruction = 80
+        self.image_index.hnsw.efSearch = 16
 
         self.text_metadata = {}
         self.image_metadata = {}
@@ -178,7 +180,7 @@ class FAISSManagerHNSW:
         self.text_temp = []
         self.image_temp = [] 
         self.text_temp_metadata = []
-        self.image_temp_metdata = []
+        self.image_temp_metadata = []
 
         self.verbose = verbose
 
@@ -188,7 +190,7 @@ class FAISSManagerHNSW:
         Funtion to store embedding in temporary list 
         """
 
-        if len(self.text_temp) >= 10000 or len(self.image_temp) >= 10000:
+        if len(self.text_temp) >= 1000 or len(self.image_temp) >= 1000:
             self.train_add()
 
         else:
@@ -218,26 +220,27 @@ class FAISSManagerHNSW:
         if self.verbose:
             print("training ....")
 
-        text_stack = np.vstack(self.text_temp)
-        self.text_index.train(text_stack)
+        if len(self.text_temp) != 0:
+            text_stack = np.vstack(self.text_temp)
+            self.text_index.train(text_stack)
 
-        self.text_index.add(text_stack)
+            self.text_index.add(text_stack)
 
-        #storirng metadata
+            #storirng metadata
 
-        for i , meta in enumerate(self.text_temp_metadata):
-            faiss_id = self.text_index.ntotal - len(self.text_temp) + i
-            self.text_metadata[faiss_id] = meta
+            for i , meta in enumerate(self.text_temp_metadata):
+                faiss_id = self.text_index.ntotal - len(self.text_temp) + i
+                self.text_metadata[faiss_id] = meta
+
+        if len(self.image_temp) != 0:
+            image_stack = np.vstack(self.image_temp)
+            self.image_index.train(image_stack)
+            self.image_index.add(image_stack)
 
 
-        image_stack = np.vstack(self.image_temp)
-        self.image_index.train(image_stack)
-        self.image_index.add(image_stack)
-
-
-        for i , meta in enumerate(self.image_temp_metdata):
-            faiss_id = self.image_index.ntotal - len(self.image_temp) + i
-            self.image_metadata[faiss_id] = meta
+            for i , meta in enumerate(self.image_temp_metadata):
+                faiss_id = self.image_index.ntotal - len(self.image_temp) + i
+                self.image_metadata[faiss_id] = meta
 
         
         self._clear_temp()
@@ -273,8 +276,12 @@ class FAISSManagerHNSW:
         faiss.write_index(self.text_index , "index/text_index.index")
         faiss.write_index(self.image_index , "index/image_index.index")
 
-        with open("index/file_meta.json" , "w+") as file:
-            json.dump(self.metadata , file)
+        with open("index/text_meta.json" , "w+") as file:
+            json.dump(self.text_metadata , file)
+
+        with open("index/image_meta.json" , "w+") as file:
+            json.dump(self.image_metadata , file)
+
 
         print("saved")
 
@@ -285,8 +292,13 @@ class FAISSManagerHNSW:
         self.text_index = faiss.read_index("index/text_index.index")
         self.image_index = faiss.read_index("index/image_index.index")
 
-        with open("index/file_meta.json" , "w+") as file:
-            self.metadata = json.load(file)
+        with open("index/text_meta.json" , "r+") as file:
+            self.text_metadata = json.load(file)
+
+        with open("index/image_meta.json" , "r+") as file:
+            self.image_metadata = json.load(file)
+
+
 
 
         
