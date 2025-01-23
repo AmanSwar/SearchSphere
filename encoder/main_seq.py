@@ -14,15 +14,16 @@ import json
 import encoder.config as config
 import encoder.utils as utils
 import encoder.embedding as embedding
-from encoder.faiss_base import FAISSManager
+from encoder.faiss_base import FAISSManagerHNSW
 
 parser = argparse.ArgumentParser(description="arg parser for cli")
 parser.add_argument("--verbose" , action="store_true" , help="too see which directory its currently at")
-parser.add_argument("--dir" , action="store_true" , help="Dir to create embeddings")
+parser.add_argument("--dir" , type=str, help="Dir to create embeddings")
 args = parser.parse_args()
 
 
 search_dir = args.dir if args.dir is not None else "/home/aman/code/searchsp/test/tempsearchdir"
+
 content_extractor_func = {
     "pdf" : utils.pdf_extractor,
     "txt" : utils.text_extractor,
@@ -32,9 +33,9 @@ content_extractor_func = {
     "md" : utils.markdown_extractor
 }
 
-faiss_manager = FAISSManager(verbose=args.verbose)
+faiss_manager = FAISSManagerHNSW(verbose=args.verbose)
 
-def test_traversal():
+def test_traversal():       
     faiss_manager.reset_index()
     current_size = faiss_manager.current_size()
     print(f"current item in text index : {current_size[0]}")
@@ -154,7 +155,7 @@ def store_embedding(data:tuple):
         #for debugging purposes
         norm = np.linalg.norm(embedding_vec)
         print(f"Embedding norm for {metadata['file_name']}: {norm}")
-        faiss_manager.store_temp(type=embed_type , embedding=embedding_vec , metdata=metadata)
+        faiss_manager.store_temp(type=embed_type , embedding=embedding_vec , metadata=metadata)
         
 
     except Exception as e:
