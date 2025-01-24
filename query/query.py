@@ -2,134 +2,97 @@ import faiss
 import numpy as np
 import json
 import argparse
+import time
+
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+import logging
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
+
 
 from encoder.embedding import text_extract
+from encoder.faiss_base import FAISSManagerHNSW
+from query import utils
 
-INDEX = faiss.read_index('index/faiss_index.index')
-with open('index/file_meta.json' , 'r') as file:
-    METADATA_MAP = json.load(file)
 
 parser = argparse.ArgumentParser(description="arg parser for cli")
 parser.add_argument("--search" , type=str ,required=True , help="your query")
+parser.add_argument("--verbose" , action="store_true" , help="verbosify the output")
 args = parser.parse_args()
 
 
-query = args.search
+user_query = args.search
 
+#faiss init
+faiss_manager = FAISSManagerHNSW(verbose=args.verbose)
+faiss_manager.load_state()
 
-def query_to_embedding(query:str):
+def query_extractor(query:str):
     """
     Converts the query to embedding
     args:
         query (str) : the query to be searched
+
+    returns:
+        tuple: type token , query embedding
     """
     
     query_embed = text_extract(query)
-    return query_embed
+    type_token = utils.index_token(query=query)
+
+    return (type_token ,query_embed)
 
 
-def query_faiss_and_meta(query_embedding):
+def search(query:str):
+    """
+    main function for search
 
-    k = 5
-    query_embedding = np.array(query_embedding , dtype="float32").reshape(1 , -1)
-    dist , indices = INDEX.search(query_embedding , k)
-
-    results = []
-    print("indices : " , indices)
-    for i in range(len(indices[0])):
-        faiss_id = indices[0][i]
-        result_metadata = METADATA_MAP[str(faiss_id)]
-        print(result_metadata["file_name"])
-
-    return results
+    args:
+        query (str)
 
 
-def query_faiss_debug(query_embedding):
-    k = 10
-    query_embedding = np.array(query_embedding, dtype="float32").reshape(1, -1)
-    
-    dist, indices = INDEX.search(query_embedding, k)
+    """
+    start_time = time.time()
+    type_token , query_embed = query_extractor(query=query)
 
-    image_results = []
-    text_results = []
+    if type_token == "TEXT":
+        dist , indice , metadata = utils.progress_bar(faiss_manager.search_text , query_embed=query_embed)
 
-    for i in range(len(indices[0])):
-        faiss_id = str(indices[0][i]) 
-        
-        if faiss_id in METADATA_MAP:
-            metadata = METADATA_MAP[faiss_id]
-            file_type = metadata['file_type'].lower()
-            
-            result = {
-                'rank': i + 1,
-                'file': metadata['file_name'],
-                'distance': dist[0][i],
-                'type': file_type
-            }
-            
-            if file_type in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-                image_results.append(result)
-            else:
-                text_results.append(result)
-    
-    print("\nImage Results:")
-    if image_results:
-        for res in image_results:
-            print(f"Rank {res['rank']}: {res['file']} (distance: {res['distance']:.4f})")
+    elif type_token == "IMAGE":
+        dist , indice , metadata = utils.progress_bar(faiss_manager.search_image ,query_embed=query_embed)
     else:
-        print("No image results found!")
-    
-    print("\nText Results:")
-    if text_results:
-        for res in text_results:
-            print(f"Rank {res['rank']}: {res['file']} (distance: {res['distance']:.4f})")
+        raise Exception("Invalid token generated ...")
+
+    end_time = time.time() - start_time
+    if args.verbose:
+        print(metadata)
+        print(indice)
+
+    for i in range(len(indice)):
+        faiss_id = indice[i]
+        result_meta = metadata[str(faiss_id)]
+        
+
+        if args.verbose:
             
-    return image_results, text_results
+            print("\n")
+            print(f"file name -> {result_meta["file_name"]}")
+            print(f"similarity score -> {dist[i]}")
+            print(f"File Info...")
+            print(f"file location -> {result_meta["file_path"]}")
+        else:
+            print("\n")
+            print(result_meta["file_name"])
+            print(f"searched in {end_time:3f} secs")
 
 
-def query_img_boost(query_embedding):
-    k = 10
-    query_embedding = np.array(query_embedding, dtype="float32").reshape(1, -1)
-    
-    similarities, indices = INDEX.search(query_embedding, k)
-    
-    # Store all results with boosted image similarities
-    results = []
-    for i in range(len(indices[0])):
-        faiss_id = str(indices[0][i])
-        if faiss_id in METADATA_MAP:
-            metadata = METADATA_MAP[faiss_id]
-            file_type = metadata['file_type'].lower()
-            similarity = similarities[0][i]
-            
-            # Apply boost to image results
-            if file_type in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']:
-                similarity *= 5  # Boost image similarities by 50%
-            
-            results.append({
-                'file': metadata['file_name'],
-                'type': file_type,
-                'similarity': similarity,
-                'is_image': file_type in ['.png', '.jpg', '.jpeg', '.gif', '.bmp']
-            })
-    
-    # Sort by boosted similarity
-    results.sort(key=lambda x: x['similarity'], reverse=True)
-    
-    # Print results
-    print("\nResults (higher similarity is better):")
-    for i, res in enumerate(results):
-        print(f"Rank {i+1}: {res['file']} ({res['type']}) - similarity: {res['similarity']:.4f}")
-    
-    return results
+
 
 if __name__ == "__main__":
 
-    qu_embed = query_to_embedding(query)
-
-    query_img_boost(qu_embed)
-
-    # print(METADATA_MAP)
+    search(user_query)
 
