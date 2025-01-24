@@ -245,6 +245,47 @@ class FAISSManagerHNSW:
         
         self._clear_temp()
 
+
+    def search_image(self , query_embed: np.array):
+        """
+        function to search in image index
+        args:
+            query_embed (np.array) : query embedding vector
+        returns:
+            tuple : (distance , indices , metadatas)
+        """
+        k = 5
+        if query_embed.ndim == 1:
+            query_embed = query_embed.reshape(1 , -1)
+
+        dist , indices = self.image_index.search(query_embed.astype("float32") , k)
+        meta_data = {}
+        for i in indices[0]:
+            meta_data[str(i)] = self.image_metadata[str(i)]
+
+        return (dist[0] , indices[0] , meta_data)
+
+    def search_text(self , query_embed: np.array):
+        """
+        function to search in text index
+        args:
+            query_embed (np.array) : query embedding vector
+        returns:
+            tuple : (distance , indices , metadatas)
+        """
+        k = 5
+        if query_embed.ndim == 1:
+            query_embed = query_embed.reshape(1 , -1)
+        
+        dist , indices = self.text_index.search(query_embed.astype("float32") , k)
+
+        meta_data = {}
+        for i in indices[0]:
+            meta_data[str(i)] = self.text_metadata[str(i)]
+
+        return (dist[0] , indices[0] , meta_data)
+    
+
     def _clear_temp(self):
         self.text_temp = []
         self.image_temp = []
