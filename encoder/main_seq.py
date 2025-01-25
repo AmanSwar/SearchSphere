@@ -24,6 +24,14 @@ args = parser.parse_args()
 
 search_dir = args.dir if args.dir is not None else "/home/aman/code/searchsp/test/tempsearchdir"
 
+search_dir = utils.prep_dir(search_dir)
+
+if not os.path.exists(search_dir):
+    print(search_dir)
+    raise Exception("Directory not found")
+
+
+
 content_extractor_func = {
     "pdf" : utils.pdf_extractor,
     "txt" : utils.text_extractor,
@@ -35,7 +43,29 @@ content_extractor_func = {
 
 faiss_manager = FAISSManagerHNSW(verbose=args.verbose)
 
-def test_traversal():       
+
+def traverse_all_drives():
+    """
+    Function to traverse all dirs in a system
+    *always start from C:
+    
+    """
+    partitions = psutil.disk_partitions()
+    #list down the partitions of the drive
+    for partition in partitions:
+        # get specific partition
+        drive = partition.mountpoint 
+        # for debugging...
+        print(f"Traversing {drive}...")
+        for dirpath, dirnames, filenames in os.walk(drive):
+            
+            if config.RESTRICTED_DIRS_INTIAL in [folder_name[0] for folder_name in dirpath]:
+                continue
+            for filename in filenames:
+                file_path = os.path.join(dirpath, filename)
+
+
+def dir_traversal(search_dir):       
     faiss_manager.reset_index()
     current_size = faiss_manager.current_size()
     print(f"current item in text index : {current_size[0]}")
@@ -168,7 +198,7 @@ if __name__ == "__main__":
     start_time = time.time()
 
 
-    test_traversal()
+    dir_traversal(search_dir=search_dir)
     print(f"TOTAL ENTERIES : {faiss_manager.current_size()}")
     faiss_manager.save_state()
     end_time = time.time() - start_time
