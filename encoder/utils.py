@@ -8,6 +8,41 @@ from datetime import datetime
 import markdown
 from bs4 import BeautifulSoup
 from tqdm import tqdm
+from pathlib import Path
+
+def preprocess_dir(dir:os.path)-> os.path:
+    """
+    Function to preprocess the dir
+    args:
+        dir (os.path) -> search directory
+    return 
+
+    """
+    expanded_path = os.path.expanduser(dir)
+    print(expanded_path)
+    normalized_path = os.path.normpath(expanded_path)
+    print(normalized_path)
+    
+    # Convert Windows path to WSL path if needed
+    if normalized_path.startswith('/mnt/'):
+        normalized_path = normalized_path.replace('/mnt/e', 'E:')
+    
+    return normalized_path
+
+def prep_dir(directory):
+    # Convert Windows path to correct format in WSL
+    if directory.startswith('/mnt/'):
+        # Convert /mnt/e/path to E:/path
+        directory = directory.replace('/mnt/e', 'E:')
+    
+    # Expand user home and normalize path
+    directory = os.path.expanduser(directory)
+    directory = os.path.normpath(directory)
+    
+    return directory
+
+
+
 
 def get_meta(file_path: os.path) -> dict:
     """
