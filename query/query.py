@@ -20,7 +20,7 @@ from query import utils
 
 
 parser = argparse.ArgumentParser(description="arg parser for cli")
-parser.add_argument("--search" , type=str ,required=True , help="your query")
+parser.add_argument("--search" , type=str ,required=False , help="your query")
 parser.add_argument("--verbose" , action="store_true" , help="verbosify the output")
 args = parser.parse_args()
 
@@ -87,6 +87,7 @@ def search(query:str):
         else:
             print("\n")
             print(result_meta["file_name"])
+            print(f"file location -> {result_meta["file_path"]}")
             print(f"searched in {end_time:3f} secs")
 
 
