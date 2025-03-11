@@ -1,5 +1,6 @@
 # SEARCH SPHERE
 
+![SEARCH SPHERE LOGO](https://github.com/AmanSwar/SearchSphere/blob/master/image.png)
   
 ### **OVERVIEW**
 
