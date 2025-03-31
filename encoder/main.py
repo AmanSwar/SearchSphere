@@ -50,6 +50,7 @@ def traverse_all_drives():
         # for debugging...
         print(f"Traversing {drive}...")
         for dirpath, dirnames, filenames in os.walk(drive):
+            
             if config.RESTRICTED_DIRS_INTIAL in [folder_name[0] for folder_name in dirpath]:
                 continue
             for filename in filenames:
@@ -62,7 +63,7 @@ def main():
         CONTENT_QUEUE = Queue()
         EMBEDDING_QUEUE = Queue()
         METADATA_MAP = manager.dict() # in shared memory
-        INDEX = faiss.IndexFlatL2(512)
+        
 
         def test_traversal():
             try:

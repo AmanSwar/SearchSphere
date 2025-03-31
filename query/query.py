@@ -29,7 +29,13 @@ user_query = args.search
 
 #faiss init
 faiss_manager = FAISSManagerHNSW(verbose=args.verbose)
-faiss_manager.load_state()
+faiss_init_flag = 0
+
+def faiss_init():
+    global faiss_init_flag
+    faiss_manager.load_state()
+    faiss_init_flag = 1
+
 
 def query_extractor(query:str):
     """
@@ -56,6 +62,12 @@ def search(query:str):
 
 
     """
+
+    global faiss_init_flag
+    if faiss_init_flag == 0:
+        faiss_init()
+
+        
     start_time = time.time()
     type_token , query_embed = query_extractor(query=query)
 
@@ -93,7 +105,4 @@ def search(query:str):
 
 
 
-if __name__ == "__main__":
-
-    search(user_query)
 
