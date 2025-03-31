@@ -152,7 +152,7 @@ class FAISSManagerIVF:
 
 class FAISSManagerHNSW:
     """
-    Class to manage FASISS db with HNSW and PQ
+    Class to manage FASISS db with HNSW
     """
 
     def __init__(self , embedding_dim:int = 512 ,subvector_count:int = 16 , nbit:int = 4 , verbose=False):
@@ -278,9 +278,12 @@ class FAISSManagerHNSW:
             query_embed = query_embed.reshape(1 , -1)
         
         dist , indices = self.text_index.search(query_embed.astype("float32") , k)
-
+        print("\n")
+        print(indices)
+        print("\n")
         meta_data = {}
         for i in indices[0]:
+            print(i)
             meta_data[str(i)] = self.text_metadata[str(i)]
 
         return (dist[0] , indices[0] , meta_data)
@@ -330,15 +333,20 @@ class FAISSManagerHNSW:
         """
         Function to load state
         """
-        self.text_index = faiss.read_index("index/text_index.index")
-        self.image_index = faiss.read_index("index/image_index.index")
 
-        with open("index/text_meta.json" , "r+") as file:
-            self.text_metadata = json.load(file)
+        text_index_path = "index/text_index.index"
+        image_index_path = "index/image_index.index"
+        if os.path.exists(text_index_path) and os.path.exists(image_index_path):
+            self.text_index = faiss.read_index(text_index_path)
+            self.image_index = faiss.read_index(image_index_path)
 
-        with open("index/image_meta.json" , "r+") as file:
-            self.image_metadata = json.load(file)
+            with open("index/text_meta.json" , "r+") as file:
+                self.text_metadata = json.load(file)
 
+            with open("index/image_meta.json" , "r+") as file:
+                self.image_metadata = json.load(file)
+        else:
+            print("index not found")
 
 
 
