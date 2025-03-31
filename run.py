@@ -6,6 +6,11 @@ from encoder.main_seq import dir_traversal
 
 import os
 import time
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module='tensorflow')
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'  
+
 
 # init
 
@@ -33,7 +38,7 @@ dir_traversal(search_dir=search_dir)
 end_time = time.time() - start_time
 
 print(f"Generated embeddings in {end_time:2f} secs")
-
+from query import query
 while True:
     print("\nEnter query : ...")
     q = input()
