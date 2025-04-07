@@ -254,7 +254,7 @@ class FAISSManagerHNSW:
         returns:
             tuple : (distance , indices , metadatas)
         """
-        k = 5
+        k = 3 
         if query_embed.ndim == 1:
             query_embed = query_embed.reshape(1 , -1)
 
@@ -273,7 +273,7 @@ class FAISSManagerHNSW:
         returns:
             tuple : (distance , indices , metadatas)
         """
-        k = 5
+        k = 1
         if query_embed.ndim == 1:
             query_embed = query_embed.reshape(1 , -1)
         
