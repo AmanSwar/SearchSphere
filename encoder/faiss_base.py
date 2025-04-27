@@ -347,25 +347,3 @@ class FAISSManagerHNSW:
                 self.image_metadata = json.load(file)
         else:
             print("index not found")
-
-
-
-        
-        
-
-    
-
-        
-         
-
-    
-    
-    
-
-
-
-
-
-    
-
-
