@@ -60,30 +60,46 @@ def faiss_init(console=default_console):
             raise # Re-raise to signal failure
 
 # --- Query Processing ---
-def query_extractor(query: str, console=default_console):
+def query_extractor(query: str, console=default_console, is_nested=False):
     """
     Converts the query to embedding. Uses Rich status.
+    
+    Args:
+        query (str): The search query.
+        console (Console): Rich console instance for printing.
+        is_nested (bool): If True, avoids creating a progress display when called from within another live display.
     """
-    with Progress(
-        SpinnerColumn(spinner_name="dots"),
-        TextColumn("[progress.description]{task.description}"),
-        transient=True, # Spinner disappears after completion
-        console=console
-    ) as progress:
-        task = progress.add_task("Analyzing query type...", total=1)
-        # Assuming index_token is fast, no real progress needed here
-        type_token = utils.index_token(query=query) 
-        progress.update(task, completed=1, description=f"Query type: [bold]{type_token}[/bold]")
+    if is_nested:
+        # Simple non-live version when being called from within another live display
+        console.print("Analyzing query type...")
+        type_token = utils.index_token(query=query)
+        console.print(f"Query type: [bold]{type_token}[/bold]")
         
-        task = progress.add_task("Generating query embedding...", total=1)
-        # Assuming text_extract handles model loading internally if needed
-        query_embed = text_extract(query) 
-        progress.update(task, completed=1, description="Query embedding generated.")
+        console.print("Generating query embedding...")
+        query_embed = text_extract(query)
+        console.print("Query embedding generated.")
+    else:
+        # Full version with rich progress for standalone use
+        with Progress(
+            SpinnerColumn(spinner_name="dots"),
+            TextColumn("[progress.description]{task.description}"),
+            transient=True, # Spinner disappears after completion
+            console=console
+        ) as progress:
+            task = progress.add_task("Analyzing query type...", total=1)
+            # Assuming index_token is fast, no real progress needed here
+            type_token = utils.index_token(query=query) 
+            progress.update(task, completed=1, description=f"Query type: [bold]{type_token}[/bold]")
+            
+            task = progress.add_task("Generating query embedding...", total=1)
+            # Assuming text_extract handles model loading internally if needed
+            query_embed = text_extract(query) 
+            progress.update(task, completed=1, description="Query embedding generated.")
 
     return type_token, query_embed
 
 # --- Search Execution ---
-def search(query: str, console=default_console, verbose=False, k: int = 5):
+def search(query: str, console=default_console, verbose=False, k: int = 5, is_nested=False):
     """
     Main function for search, using Rich for status and results.
     Args:
@@ -91,6 +107,7 @@ def search(query: str, console=default_console, verbose=False, k: int = 5):
         console (Console): Rich console instance for printing.
         verbose (bool): Whether to show similarity scores.
         k (int): Number of results to retrieve.
+        is_nested (bool): If True, avoids creating nested live displays.
     """
     global faiss_init_flag
     if faiss_init_flag == 0:
@@ -110,7 +127,8 @@ def search(query: str, console=default_console, verbose=False, k: int = 5):
     
     try:
         # --- Get Query Embedding ---
-        type_token, query_embed = query_extractor(query=query, console=console)
+        # Pass the is_nested flag to avoid nested live displays
+        type_token, query_embed = query_extractor(query=query, console=console, is_nested=is_nested)
 
         # --- Perform Search ---
         description = f"Searching {type_token.lower()} index..."
@@ -123,15 +141,14 @@ def search(query: str, console=default_console, verbose=False, k: int = 5):
              console.print(f"[bold red]Error:[/bold red] Invalid query type token '{type_token}' generated.")
              return
 
-        # Using rich.progress.track for the search itself if it's potentially long
-        # Note: FAISS search is often very fast, so track might flash briefly.
-        # If search is always instant, a simple status message might be better.
-        # Let's use track assuming it *could* take a moment on huge indices.
-        
-        # We can't easily use track() directly if the function doesn't yield progress.
-        # Let's use a status spinner instead.
-        with console.status(f"[bold yellow]{description}[/bold yellow]", spinner="earth"):
+        # If we're nested, just print status rather than using a status display
+        if is_nested:
+            console.print(f"[bold yellow]{description}[/bold yellow]")
             dist, indice, metadata = search_func(query_embed=query_embed)
+        else:
+            # We can use a status spinner if we're not nested
+            with console.status(f"[bold yellow]{description}[/bold yellow]", spinner="earth"):
+                dist, indice, metadata = search_func(query_embed=query_embed)
             
     except Exception as e:
         console.print(f"[bold red]❌ Error during search execution:[/bold red]")
@@ -181,7 +198,6 @@ def search(query: str, console=default_console, verbose=False, k: int = 5):
                  if verbose:
                      row_data.append("N/A")
                  table.add_row(*row_data)
-
 
         console.print(table)
 
