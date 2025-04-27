@@ -9,6 +9,8 @@ import markdown
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 from pathlib import Path
+import cv2
+
 
 def preprocess_dir(dir:os.path)-> os.path:
     """
@@ -187,16 +189,6 @@ def markdown_extractor(file_path: os.path) -> str:
     text = soup.get_text()
 
     return text[:10000 if len(text) > 10000 else len(text)]
-
-
-
-
-     
-
-
-
-
-
 
 
 
