@@ -28,7 +28,7 @@ try:
     import encoder.config as config
     import encoder.utils as utils
     import encoder.embedding as embedding
-    from encoder.faiss_base import FAISSManagerHNSW
+    from encoder.faiss_base import FAISSManagerHNSW , FAISSManagerIVF
 except ImportError as e:
     print(f"Error importing local modules in main_seq.py: {e}")
     exit(1)
@@ -42,6 +42,7 @@ default_console = Console()
 # Initialize FAISS Manager globally - verbosity controlled here
 # Let's make verbose=False default, rely on rich progress/prints
 faiss_manager = FAISSManagerHNSW(verbose=False) 
+# db_manager = FAISSManagerIVF(5)
 
 content_extractor_func = {
     "pdf" : utils.pdf_extractor,
@@ -115,10 +116,15 @@ def process_directory_with_progress(search_dir: str, progress_callback: callable
     # Maybe return final status (could also be part of last callback)
     return {"success": True, "processed": processed_count, "errors": errors, "final_counts": final_counts}
 
-def dir_traversal(search_dir, console=default_console):       
+def dir_traversal(search_dir, console=default_console, external_progress=None):       
     """
     Traverses directory, extracts content, generates embeddings, and adds to FAISS.
     Uses Rich progress bar.
+    
+    Parameters:
+    - search_dir: Directory to traverse
+    - console: Rich console object for output
+    - external_progress: Optional external progress object from the caller
     """
     console.print("[yellow]Resetting FAISS index before traversal...[/yellow]")
     faiss_manager.reset_index()
@@ -152,39 +158,64 @@ def dir_traversal(search_dir, console=default_console):
         console.print("[yellow]⚠️ No supported files found in the specified directory.[/yellow]")
         return # Nothing to process
 
-    # Setup Rich Progress Bar
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeRemainingColumn(),
-        TimeElapsedColumn(),
-        console=console
-    )
-
     processed_files = 0
     errors = 0
 
     try:
-        with progress:
-            task_id = progress.add_task("[yellow]Processing files...", total=len(file_list))
+        # If we have an external progress bar, use it
+        if external_progress:
+            # Use the existing task or create a new one within the provided progress
+            task_id = None
+            for task in external_progress.tasks:
+                if task.description == "Generating embeddings...":
+                    task_id = task.id
+                    break
             
+            if task_id is None:
+                task_id = external_progress.add_task("[yellow]Processing files...", total=len(file_list))
+            
+            # Process files with external progress
             for file_path in file_list:
-                progress.update(task_id, description=f"Processing: [cyan]{os.path.basename(file_path)}[/cyan]")
+                external_progress.update(task_id, description=f"Processing: [cyan]{os.path.basename(file_path)}[/cyan]", refresh=True)
                 try:
-                    content_extract(file_path=file_path, console=console) # Pass console
+                    content_extract(file_path=file_path, console=console)
                     processed_files += 1
                 except Exception as e:
                     errors += 1
-                    # Log error but continue processing other files
                     console.print(f"\n[bold red]Error processing file:[/bold red] [italic]{file_path}[/italic]")
-                    console.print(f"[red]   {e}[/red]") 
-                    # Optionally print traceback for debugging, but keep progress clean
-                    # traceback.print_exc() 
+                    console.print(f"[red]   {e}[/red]")
                 finally:
-                    # Advance progress bar regardless of success/failure for this file
-                    progress.advance(task_id)
+                    # Update progress but don't advance (caller manages completion)
+                    completed = processed_files / len(file_list) * 80  # Up to 80% as in generate_embeddings
+                    external_progress.update(task_id, completed=completed)
+        else:
+            # Create our own progress bar only if one wasn't provided
+            # Setup Rich Progress Bar
+            progress = Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeRemainingColumn(),
+                TimeElapsedColumn(),
+                console=console
+            )
+            
+            with progress:
+                task_id = progress.add_task("[yellow]Processing files...", total=len(file_list))
+                
+                for file_path in file_list:
+                    progress.update(task_id, description=f"Processing: [cyan]{os.path.basename(file_path)}[/cyan]")
+                    try:
+                        content_extract(file_path=file_path, console=console)
+                        processed_files += 1
+                    except Exception as e:
+                        errors += 1
+                        console.print(f"\n[bold red]Error processing file:[/bold red] [italic]{file_path}[/italic]")
+                        console.print(f"[red]   {e}[/red]") 
+                    finally:
+                        # Advance progress bar regardless of success/failure for this file
+                        progress.advance(task_id)
 
         console.print(f"\n[blue]Traversal complete.[/blue]")
         console.print(f"  Processed: [green]{processed_files}[/green] files")
@@ -193,16 +224,34 @@ def dir_traversal(search_dir, console=default_console):
 
         # --- Training and Adding ---
         console.print("[yellow]Storing embeddings in FAISS index...[/yellow]")
-        # This might take time, add a status indicator
-        with console.status("[bold yellow]Adding vectors to FAISS...[/bold yellow]", spinner="dots"):
-            faiss_manager.train_add() 
+        
+        # Check if we're using an external progress bar
+        if external_progress:
+            # Find the existing task and update its description
+            task_id = None
+            for task in external_progress.tasks:
+                if task.description.startswith("Processing:") or task.description == "Generating embeddings...":
+                    task_id = task.id
+                    external_progress.update(task_id, description="Adding vectors to FAISS...", refresh=True)
+                    break
+                    
+            # Do the work without a new live display
+            faiss_manager.train_add()
+            
+            # Update description back after completion if we found a task
+            if task_id is not None:
+                external_progress.update(task_id, description="Generating embeddings...", refresh=True)
+        else:
+            # Use status display only if we're not already in an external progress
+            with console.status("[bold yellow]Adding vectors to FAISS...[/bold yellow]", spinner="dots"):
+                faiss_manager.train_add()
+                
         console.print("[green]✅ Embeddings added to FAISS index.[/green]")
 
     except Exception as e:
         console.print(f"\n[bold red]❌ An critical error occurred during directory traversal or indexing:[/bold red]")
         console.print_exception(show_locals=False) # Rich traceback
         raise # Re-raise after logging
-
 
 def content_extract(file_path, console=default_console):
     """
